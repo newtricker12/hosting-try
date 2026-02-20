@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database
+users.db
+*.db
+*.sqlite3
+
+# Secrets
+approved_keys.json
+pending_approvals.json
+
+# Logs
+*.log
