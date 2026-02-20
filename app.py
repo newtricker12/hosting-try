@@ -288,11 +288,22 @@ def init_session():
 def lg(msg, s=None):
     ts = time.strftime("%H:%M:%S")
     fmt = f"[{ts}] {msg}"
+    
+    # Add to AutomationState object
     if s:
         s.logs.append(fmt)
-    if 'astate' in session:
-        session['astate']['logs'].append(fmt)
-        session.modified = True
+    
+    # ALWAYS update session for live display
+    try:
+        if 'astate' in session:
+            if fmt not in session['astate']['logs']:  # Prevent duplicates
+                session['astate']['logs'].append(fmt)
+                # Keep only last 100 logs
+                if len(session['astate']['logs']) > 100:
+                    session['astate']['logs'] = session['astate']['logs'][-100:]
+                session.modified = True
+    except:
+        pass
 
 def log_cls(log):
     lo = log.lower()
@@ -412,6 +423,10 @@ def send_loop(config, s, pid='AUTO-1'):
         if not inp:
             lg(f'{pid}: ❌ Message input not found!', s)
             s.running = False
+            # Update session
+            if 'astate' in session:
+                session['astate']['running'] = False
+                session.modified = True
             return 0
         delay = int(config['delay'])
         msgs = [m.strip() for m in config['messages'].split('\n') if m.strip()] or ['Hello!']
@@ -443,6 +458,13 @@ def send_loop(config, s, pid='AUTO-1'):
                 sent += 1
                 s.message_count = sent
                 lg(f'{pid}: ✅ #{sent} sent — "{full[:45]}"  | wait {delay}s', s)
+                
+                # Update session with logs
+                if 'astate' in session:
+                    session['astate']['message_count'] = sent
+                    session['astate']['logs'] = s.logs.copy()
+                    session.modified = True
+                
                 time.sleep(delay)
             except Exception as e:
                 lg(f'{pid}: send error: {str(e)[:80]}', s)
@@ -452,6 +474,9 @@ def send_loop(config, s, pid='AUTO-1'):
     except Exception as e:
         lg(f'{pid}: ❌ Fatal: {str(e)}', s)
         s.running = False
+        if 'astate' in session:
+            session['astate']['running'] = False
+            session.modified = True
         return 0
     finally:
         if driver:
@@ -469,16 +494,26 @@ def run_multi(cfgs, s):
         t.join()
 
 def start_auto(config, cookie_mode, multi_cookies):
+    # Create automation state object
     s = AutomationState()
     s.running = True
     s.message_count = 0
     s.logs = []
     s.rot_idx = 0
-    lg('🚀 Automation starting…', s)
     
-    session['astate'] = {'running': True, 'message_count': 0, 'logs': [], 'rot_idx': 0}
+    # Initialize session state
+    session['astate'] = {
+        'running': True, 
+        'message_count': 0, 
+        'logs': ['[' + time.strftime("%H:%M:%S") + '] 🚀 Automation starting…'], 
+        'rot_idx': 0
+    }
     session.modified = True
     
+    # Log to AutomationState object too
+    s.logs.append('[' + time.strftime("%H:%M:%S") + '] 🚀 Automation starting…')
+    
+    # Start thread
     if cookie_mode == 'multiple' and multi_cookies:
         cfgs = [{**config, 'cookies': ck} for ck in multi_cookies]
         t = threading.Thread(target=run_multi, args=(cfgs, s), daemon=True)
